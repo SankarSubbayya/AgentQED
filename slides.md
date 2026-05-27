@@ -230,8 +230,8 @@ Sharing. Right now everything lives in `localStorage`, which means your verified
 
 ## Built by
 
-Sankar Subbayya · accurateai.org  
-Ganesh Sankar · UC Berkeley
+Sankar Subbayya · [accurateai.org](https://accurateai.org)  
+[Ganesh Sankar](https://www.linkedin.com/in/ganesh-sankar-5a1974379/) · UC Berkeley
 
 <br>
 
