@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentQED — Translate-to-Lean-4 Proof Verifier</title>
+  <meta name="description" content="Write a math proof in plain English, voice, or a photo of handwritten work. Gemini 3.1 Pro translates it to Lean 4 and a real theorem prover decides if it's right. Compiler-verified, not vibes-verified." />
+
+  <meta property="og:title" content="AgentQED — Translate-to-Lean-4 Proof Verifier" />
+  <meta property="og:description" content="Gemini 3.1 Pro writes the Lean. Vercel Sandbox runs the real compiler in a Firecracker microVM. On rejection, the agent reads the error and edits the proof until it typechecks." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://agentqed.pages.dev/" />
+  <meta property="og:image" content="https://accurateai.org/projects/agentqed.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Cloudflare Web Analytics -->
+  <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token": ""}'></script>
+  <!-- End Cloudflare Web Analytics -->
+
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --surface: #ffffff;
+      --text: #18181b;
+      --text-muted: #71717a;
+      --border: #e4e4e7;
+      --border-strong: #d4d4d8;
+      --accent: #7c3aed;
+      --accent-hover: #6d28d9;
+      --accent-soft: rgba(124, 58, 237, 0.12);
+      --code-bg: #f4f0fa;
+      --code-text: #5b21b6;
+      --radius: 10px;
+      --radius-sm: 6px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    header.hero { text-align: left; margin-bottom: 40px; }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+    .eyebrow::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px var(--accent-soft);
+    }
+    h1 {
+      font-size: 40px;
+      line-height: 1.08;
+      font-weight: 750;
+      letter-spacing: -0.01em;
+      margin: 0 0 14px;
+    }
+    .lede {
+      font-size: 18px;
+      color: var(--text);
+      max-width: 640px;
+      margin: 0 0 24px;
+    }
+    .lede em { color: var(--accent); font-style: italic; font-weight: 600; }
+
+    .cta-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .btn:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+
+    section { margin-top: 48px; }
+    h2 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.005em;
+      margin: 0 0 16px;
+    }
+
+    p { margin: 0 0 14px; }
+
+    code {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.88em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .scope-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .scope-chip {
+      display: inline-block;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-hover);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .arch-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 10px;
+    }
+    .arch-list li {
+      padding: 14px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 15px;
+    }
+
+    pre.lean {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.55;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text);
+    }
+    pre.lean .kw { color: var(--accent); font-weight: 600; }
+    pre.lean .com { color: var(--text-muted); font-style: italic; }
+
+    .link-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .link-card {
+      display: block;
+      padding: 18px 18px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      transition: border-color 0.15s, transform 0.15s;
+    }
+    .link-card:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      text-decoration: none;
+      transform: translateY(-1px);
+    }
+    .link-card-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .link-card-desc {
+      color: var(--text-muted);
+      font-size: 13.5px;
+      line-height: 1.5;
+    }
+
+    .credit-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px 18px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 14px;
+    }
+    .credit-label { color: var(--text-muted); font-weight: 600; }
+    .credit-value { color: var(--text); font-weight: 600; }
+
+    .disclaimer {
+      margin-top: 24px;
+      padding: 14px 18px;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 13.5px;
+    }
+
+    footer {
+      margin-top: 56px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    @media (max-width: 560px) {
+      h1 { font-size: 32px; }
+      .lede { font-size: 16px; }
+      .wrap { padding: 32px 18px 60px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header class="hero">
+      <div class="eyebrow">Zero to Agent Hackathon · Vercel × DeepMind · March 2026</div>
+      <h1>AgentQED</h1>
+      <p class="lede">
+        Write a math proof in plain English, voice, or a photo of handwritten
+        work. Gemini 3.1 Pro translates it to Lean 4 and a real theorem prover
+        decides if it's right. <em>Compiler-verified, not vibes-verified.</em>
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://proof-agent.vercel.app">Try the live app →</a>
+        <a class="btn" href="https://github.com/SankarSubbayya/AgentQED">GitHub</a>
+        <a class="btn" href="https://accurateai.org">More by AccurateAI</a>
+      </div>
+    </header>
+
+    <section>
+      <h2>What it does</h2>
+      <p>
+        A natural-language proof can be wrong in ways that read fluent. A
+        skipped case. A quantifier flipped. An induction step that quietly
+        assumes what it set out to prove. A language model will tell you it
+        looks fine. AgentQED asks a theorem prover instead.
+      </p>
+      <p>
+        You give it a proof. The agent translates the proof into Lean 4, runs
+        the actual Lean compiler in an isolated sandbox, and reports back. If
+        the compiler accepts the proof, it is verified by the same tool used
+        to formalize the polynomial Freiman-Ruzsa conjecture. If it rejects
+        the proof, the agent reads the compiler's error, edits the Lean, and
+        tries again. Up to twelve times.
+      </p>
+      <div class="scope-strip">
+        <span class="scope-chip">Plain English</span>
+        <span class="scope-chip">LaTeX</span>
+        <span class="scope-chip">Voice</span>
+        <span class="scope-chip">Photo of handwriting</span>
+        <span class="scope-chip">Multi-page PDF</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>A worked example</h2>
+      <p>You type:</p>
+      <p style="font-style: italic; color: var(--text-muted);">
+        Prove that for all natural numbers <code>n</code>, the sum
+        <code>0 + 1 + ⋯ + n</code> equals <code>n(n+1)/2</code>.
+      </p>
+      <p>Gemini writes this, and the sandbox compiles it on the first try:</p>
+<pre class="lean"><span class="kw">def</span> sumTo : Nat → Nat
+  | 0     =&gt; 0
+  | n + 1 =&gt; (n + 1) + sumTo n
+
+<span class="kw">theorem</span> sum_formula (n : Nat) : 2 * sumTo n = n * (n + 1) := <span class="kw">by</span>
+  <span class="kw">induction</span> n <span class="kw">with</span>
+  | zero =&gt; rfl
+  | succ k ih =&gt;
+    simp [sumTo, Nat.mul_add, Nat.add_mul]
+    omega
+</pre>
+      <p>
+        You did not need to know what <code>omega</code> does to get the
+        verified result. (It dispatches linear arithmetic.) The Key Insight
+        and proof structure are shown first; the Lean code is collapsed by
+        default. Understanding comes before syntax.
+      </p>
+    </section>
+
+    <section>
+      <h2>Architecture</h2>
+      <ul class="arch-list">
+        <li>
+          <strong>Gemini 3.1 Pro</strong> for translation. Handles photographs
+          of handwritten math and does not get stuck inside its own previous
+          suggestion when fed a compiler error.
+        </li>
+        <li>
+          <strong>Vercel Sandbox</strong> running Lean 4 in an isolated
+          Firecracker microVM. Each request gets a fresh filesystem, so no
+          shared state can corrupt the next user's run. Cold start about six
+          seconds; warm is instant.
+        </li>
+        <li>
+          <strong>Self-correcting agent loop.</strong> On compiler rejection,
+          the stderr is filtered to keep the goal state and the failing line,
+          then prepended to the next prompt. Up to twelve retries. This single
+          feedback-shaping change took the success rate on the sample proof
+          set from about half to all of it.
+        </li>
+        <li>
+          <strong>Next.js + Vercel AI SDK</strong> for streaming UI. You watch
+          the agent talk to itself in real time; the wait feels like progress,
+          not a loading spinner.
+        </li>
+        <li>
+          <strong>Multi-modal input</strong> via Web Speech API (voice),
+          file upload (images and PDFs), and direct text. A vision pass on
+          images and per-page extraction on PDFs feed into the same
+          translation step.
+        </li>
+        <li>
+          <strong>Progressive disclosure UI.</strong> Key Insight at the top,
+          proof structure tree, then collapsed sections for Lean code,
+          step-by-step breakdown, mathematical insight, and Lean tactic notes.
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Why not have the LLM grade the proof</h2>
+      <p>
+        Because language models are confident liars about math. A model will
+        tell you your proof of Fermat's Last Theorem is correct. It will say
+        that in a complete sentence. It will keep saying it.
+      </p>
+      <p>
+        The Lean compiler does not have a personality. If your proof has a
+        gap, the term it expects to typecheck does not typecheck, and the
+        error points at the line. That error is what the agent reads to
+        figure out what to fix. Everything else is plumbing to get you there
+        without learning Lean first.
+      </p>
+    </section>
+
+    <section>
+      <h2>Try it</h2>
+      <div class="link-grid">
+        <a class="link-card" href="https://proof-agent.vercel.app">
+          <div class="link-card-title">Live app</div>
+          <div class="link-card-desc">
+            Hosted on Vercel. Six sample proofs on the landing page —
+            modus ponens is the fastest, the sum formula is the most
+            satisfying.
+          </div>
+        </a>
+        <a class="link-card" href="https://github.com/SankarSubbayya/AgentQED">
+          <div class="link-card-title">Source on GitHub</div>
+          <div class="link-card-desc">
+            Next.js + AI SDK + Vercel Sandbox. The Lean runner, agent loop,
+            and system prompt are all in <code>src/</code>.
+          </div>
+        </a>
+        <a class="link-card" href="https://proof-agent.vercel.app">
+          <div class="link-card-title">Bring your own proof</div>
+          <div class="link-card-desc">
+            Photograph something you scribbled on paper, drop it into the
+            upload box, and watch the agent translate and verify. The PDF
+            path works for multi-page proofs too.
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Credits</h2>
+      <div class="credit-row">
+        <span class="credit-label">Built at</span>
+        <span class="credit-value">Zero to Agent Hackathon · Shack15 SF · March 2026</span>
+      </div>
+      <div class="disclaimer">
+        Verified does not mean intended. A proof can typecheck and still
+        prove the wrong theorem if the statement is wrong. Always read the
+        statement the agent produced, not just the green checkmark.
+      </div>
+    </section>
+
+    <footer>
+      <span>AgentQED · Built for the Zero to Agent Hackathon · Vercel × DeepMind</span>
+      <span><a href="https://github.com/SankarSubbayya/AgentQED">github.com/SankarSubbayya/AgentQED</a></span>
+    </footer>
+
+  </div>
+</body>
+</html>
